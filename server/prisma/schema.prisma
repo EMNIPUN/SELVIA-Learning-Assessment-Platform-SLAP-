@@ -1,0 +1,816 @@
+// SELVIA External Education & Assessment Platform — PostgreSQL schema
+// Source of truth: docs/database-design.md
+//
+// This database stores observed data only. Competency, mastery, knowledge gaps, and
+// adaptive decisions belong to the Adaptive AI Tutor. Concept-to-concept relationships
+// belong to the Neo4j Course Knowledge Graph, which references Concept.id.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  STUDENT
+  LECTURER
+  ADMIN
+
+  @@map("user_role")
+}
+
+enum ContentStatus {
+  DRAFT
+  UNDER_REVIEW
+  APPROVED
+  PUBLISHED
+  ARCHIVED
+
+  @@map("content_status")
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  DROPPED
+
+  @@map("enrollment_status")
+}
+
+enum ContentSourceType {
+  LECTURER_AUTHORED
+  TEXTBOOK
+  ACADEMIC_PAPER
+  WEBSITE
+  OPEN_EDUCATIONAL_RESOURCE
+  PAST_PAPER
+  AI_GENERATED
+  IMPORTED
+
+  @@map("content_source_type")
+}
+
+enum MaterialType {
+  DOCUMENT
+  SLIDES
+  VIDEO
+  AUDIO
+  LINK
+  READING
+  OTHER
+
+  @@map("material_type")
+}
+
+enum ExampleType {
+  WORKED_EXAMPLE
+  CODE_EXAMPLE
+  CASE_STUDY
+  DIAGRAM
+  COUNTER_EXAMPLE
+
+  @@map("example_type")
+}
+
+enum ExerciseType {
+  CODING
+  SHORT_ANSWER
+  PROBLEM_SOLVING
+  DIAGRAM
+  MULTI_STEP
+
+  @@map("exercise_type")
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE_SINGLE
+  MULTIPLE_CHOICE_MULTIPLE
+  TRUE_FALSE
+  SHORT_ANSWER
+  FILL_IN_THE_BLANK
+  MATCHING
+  ORDERING
+  ESSAY
+  CODE
+
+  @@map("question_type")
+}
+
+enum DifficultyLevel {
+  EASY
+  MEDIUM
+  HARD
+
+  @@map("difficulty_level")
+}
+
+enum BloomLevel {
+  REMEMBER
+  UNDERSTAND
+  APPLY
+  ANALYZE
+  EVALUATE
+  CREATE
+
+  @@map("bloom_level")
+}
+
+enum AssessmentType {
+  QUIZ
+  TEST
+  EXAMINATION
+
+  @@map("assessment_type")
+}
+
+enum ResultsReleasePolicy {
+  IMMEDIATE
+  AFTER_DEADLINE
+  MANUAL
+
+  @@map("results_release_policy")
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  AUTO_SUBMITTED
+  GRADED
+
+  @@map("attempt_status")
+}
+
+enum GradingStatus {
+  PENDING
+  AUTO_GRADED
+  MANUALLY_GRADED
+
+  @@map("grading_status")
+}
+
+enum ResultStatus {
+  PROVISIONAL
+  FINAL
+
+  @@map("result_status")
+}
+
+enum ActivityType {
+  LESSON_VIEWED
+  LESSON_COMPLETED
+  MATERIAL_VIEWED
+  MATERIAL_DOWNLOADED
+  EXAMPLE_VIEWED
+  EXERCISE_STARTED
+  EXERCISE_HINT_REQUESTED
+  EXERCISE_SUBMITTED
+  ASSESSMENT_STARTED
+  ASSESSMENT_SUBMITTED
+
+  @@map("activity_type")
+}
+
+enum ActivityTargetType {
+  LESSON
+  LEARNING_MATERIAL
+  EXAMPLE
+  EXERCISE
+  ASSESSMENT
+  QUESTION
+
+  @@map("activity_target_type")
+}
+
+enum EvidenceSourceType {
+  ASSESSMENT_ANSWER
+  EXERCISE_SUBMISSION
+  LEARNING_ACTIVITY
+
+  @@map("evidence_source_type")
+}
+
+enum EvidenceStatus {
+  COMPLETED
+  SKIPPED
+  ABANDONED
+  TIMED_OUT
+
+  @@map("evidence_status")
+}
+
+// ---------------------------------------------------------------------------
+// Users and profiles
+// ---------------------------------------------------------------------------
+
+/// Emails are stored lowercase; normalise before writing so uniqueness is case-insensitive.
+model User {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String    @unique @db.VarChar(255)
+  passwordHash String?   @map("password_hash") @db.VarChar(255)
+  firstName    String    @map("first_name") @db.VarChar(100)
+  lastName     String    @map("last_name") @db.VarChar(100)
+  role         UserRole
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  student  Student?
+  lecturer Lecturer?
+
+  contentSourcesCreated     ContentSource[]    @relation("ContentSourceCreatedBy")
+  lessonsCreated            Lesson[]           @relation("LessonCreatedBy")
+  lessonsReviewed           Lesson[]           @relation("LessonReviewedBy")
+  learningMaterialsCreated  LearningMaterial[] @relation("LearningMaterialCreatedBy")
+  learningMaterialsReviewed LearningMaterial[] @relation("LearningMaterialReviewedBy")
+  examplesCreated           Example[]          @relation("ExampleCreatedBy")
+  examplesReviewed          Example[]          @relation("ExampleReviewedBy")
+  exercisesCreated          Exercise[]         @relation("ExerciseCreatedBy")
+  exercisesReviewed         Exercise[]         @relation("ExerciseReviewedBy")
+  questionsCreated          Question[]         @relation("QuestionCreatedBy")
+  questionsReviewed         Question[]         @relation("QuestionReviewedBy")
+  assessmentsCreated        Assessment[]       @relation("AssessmentCreatedBy")
+  answersGraded             StudentAnswer[]    @relation("StudentAnswerGradedBy")
+
+  @@map("users")
+}
+
+model Student {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId        String   @unique @map("user_id") @db.Uuid
+  studentNumber String   @unique @map("student_number") @db.VarChar(50)
+  degreeProgram String?  @map("degree_program") @db.VarChar(150)
+  yearOfStudy   Int?     @map("year_of_study") @db.SmallInt
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  enrollments        CourseEnrollment[]
+  attempts           AssessmentAttempt[]
+  learningActivities LearningActivity[]
+  evidence           StudentEvidence[]
+
+  @@map("students")
+}
+
+model Lecturer {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String   @unique @map("user_id") @db.Uuid
+  staffNumber String   @unique @map("staff_number") @db.VarChar(50)
+  title       String?  @db.VarChar(50)
+  department  String?  @db.VarChar(150)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  courses Course[]
+
+  @@map("lecturers")
+}
+
+// ---------------------------------------------------------------------------
+// Course structure: Course -> Module -> Topic -> Concept
+// ---------------------------------------------------------------------------
+
+model Course {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code        String        @unique @db.VarChar(20)
+  title       String        @db.VarChar(200)
+  description String?       @db.Text
+  credits     Int?          @db.SmallInt
+  lecturerId  String        @map("lecturer_id") @db.Uuid
+  status      ContentStatus @default(DRAFT)
+  publishedAt DateTime?     @map("published_at") @db.Timestamptz(6)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  lecturer Lecturer @relation(fields: [lecturerId], references: [id], onDelete: Restrict)
+
+  modules            Module[]
+  enrollments        CourseEnrollment[]
+  assessments        Assessment[]
+  learningActivities LearningActivity[]
+  evidence           StudentEvidence[]
+
+  @@index([lecturerId])
+  @@map("courses")
+}
+
+model CourseEnrollment {
+  id          String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  courseId    String           @map("course_id") @db.Uuid
+  studentId   String           @map("student_id") @db.Uuid
+  status      EnrollmentStatus @default(ACTIVE)
+  enrolledAt  DateTime         @default(now()) @map("enrolled_at") @db.Timestamptz(6)
+  completedAt DateTime?        @map("completed_at") @db.Timestamptz(6)
+  droppedAt   DateTime?        @map("dropped_at") @db.Timestamptz(6)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  course  Course  @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  student Student @relation(fields: [studentId], references: [id], onDelete: Restrict)
+
+  @@unique([courseId, studentId])
+  @@index([studentId])
+  @@map("course_enrollments")
+}
+
+model Module {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  courseId      String        @map("course_id") @db.Uuid
+  title         String        @db.VarChar(200)
+  description   String?       @db.Text
+  sequenceOrder Int           @map("sequence_order")
+  status        ContentStatus @default(DRAFT)
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Restrict)
+
+  topics      Topic[]
+  assessments Assessment[]
+
+  @@unique([courseId, sequenceOrder])
+  @@map("modules")
+}
+
+model Topic {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  moduleId      String        @map("module_id") @db.Uuid
+  title         String        @db.VarChar(200)
+  description   String?       @db.Text
+  sequenceOrder Int           @map("sequence_order")
+  status        ContentStatus @default(DRAFT)
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+
+  concepts    Concept[]
+  assessments Assessment[]
+
+  @@unique([moduleId, sequenceOrder])
+  @@map("topics")
+}
+
+/// Concept.id is the shared identifier used by Neo4j and the Adaptive AI Tutor.
+/// Relationships between concepts are stored only in Neo4j.
+model Concept {
+  id            String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  topicId       String        @map("topic_id") @db.Uuid
+  code          String        @unique @db.VarChar(100)
+  name          String        @db.VarChar(200)
+  description   String?       @db.Text
+  sequenceOrder Int           @map("sequence_order")
+  status        ContentStatus @default(DRAFT)
+  createdAt     DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  topic Topic @relation(fields: [topicId], references: [id], onDelete: Restrict)
+
+  lessons            Lesson[]
+  exercises          Exercise[]
+  questions          Question[]
+  learningActivities LearningActivity[]
+  evidence           StudentEvidence[]
+
+  @@unique([topicId, name])
+  @@unique([topicId, sequenceOrder])
+  @@map("concepts")
+}
+
+// ---------------------------------------------------------------------------
+// Provenance and learning content
+// ---------------------------------------------------------------------------
+
+model ContentSource {
+  id                 String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceType         ContentSourceType @map("source_type")
+  title              String            @db.VarChar(300)
+  authors            String?           @db.Text
+  publisher          String?           @db.VarChar(200)
+  publicationYear    Int?              @map("publication_year") @db.SmallInt
+  edition            String?           @db.VarChar(50)
+  url                String?           @db.Text
+  isbnOrDoi          String?           @map("isbn_or_doi") @db.VarChar(100)
+  license            String?           @db.VarChar(100)
+  citation           String?           @db.Text
+  /// Required for AI_GENERATED sources (model, prompt reference, generation date).
+  generationMetadata Json?             @map("generation_metadata") @db.JsonB
+  accessedAt         DateTime?         @map("accessed_at") @db.Timestamptz(6)
+  notes              String?           @db.Text
+  createdByUserId    String            @map("created_by_user_id") @db.Uuid
+  createdAt          DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime          @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  createdBy User @relation("ContentSourceCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  lessons           Lesson[]
+  learningMaterials LearningMaterial[]
+  examples          Example[]
+  exercises         Exercise[]
+  questions         Question[]
+
+  @@index([sourceType])
+  @@map("content_sources")
+}
+
+model Lesson {
+  id                       String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conceptId                String        @map("concept_id") @db.Uuid
+  title                    String        @db.VarChar(200)
+  summary                  String?       @db.Text
+  /// Markdown.
+  body                     String        @db.Text
+  estimatedDurationMinutes Int?          @map("estimated_duration_minutes")
+  sequenceOrder            Int           @map("sequence_order")
+  status                   ContentStatus @default(DRAFT)
+  sourceId                 String?       @map("source_id") @db.Uuid
+  sourceReference          String?       @map("source_reference") @db.Text
+  createdByUserId          String        @map("created_by_user_id") @db.Uuid
+  reviewedByUserId         String?       @map("reviewed_by_user_id") @db.Uuid
+  reviewedAt               DateTime?     @map("reviewed_at") @db.Timestamptz(6)
+  publishedAt              DateTime?     @map("published_at") @db.Timestamptz(6)
+  createdAt                DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  concept    Concept        @relation(fields: [conceptId], references: [id], onDelete: Restrict)
+  source     ContentSource? @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  createdBy  User           @relation("LessonCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  reviewedBy User?          @relation("LessonReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+
+  learningMaterials LearningMaterial[]
+  examples          Example[]
+
+  @@unique([conceptId, sequenceOrder])
+  @@index([sourceId])
+  @@index([status])
+  @@map("lessons")
+}
+
+/// Belongs to a lesson; its concept is the lesson's concept.
+/// Exactly one of fileStorageKey or externalUrl is set. Files live outside the database.
+model LearningMaterial {
+  id               String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lessonId         String        @map("lesson_id") @db.Uuid
+  title            String        @db.VarChar(200)
+  description      String?       @db.Text
+  materialType     MaterialType  @map("material_type")
+  fileStorageKey   String?       @map("file_storage_key") @db.Text
+  externalUrl      String?       @map("external_url") @db.Text
+  mimeType         String?       @map("mime_type") @db.VarChar(100)
+  fileSizeBytes    BigInt?       @map("file_size_bytes")
+  sequenceOrder    Int           @map("sequence_order")
+  status           ContentStatus @default(DRAFT)
+  sourceId         String?       @map("source_id") @db.Uuid
+  sourceReference  String?       @map("source_reference") @db.Text
+  createdByUserId  String        @map("created_by_user_id") @db.Uuid
+  reviewedByUserId String?       @map("reviewed_by_user_id") @db.Uuid
+  reviewedAt       DateTime?     @map("reviewed_at") @db.Timestamptz(6)
+  publishedAt      DateTime?     @map("published_at") @db.Timestamptz(6)
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  lesson     Lesson         @relation(fields: [lessonId], references: [id], onDelete: Restrict)
+  source     ContentSource? @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  createdBy  User           @relation("LearningMaterialCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  reviewedBy User?          @relation("LearningMaterialReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([lessonId, sequenceOrder])
+  @@index([sourceId])
+  @@index([status])
+  @@map("learning_materials")
+}
+
+/// Belongs to a lesson; its concept is the lesson's concept.
+model Example {
+  id                  String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  lessonId            String        @map("lesson_id") @db.Uuid
+  title               String        @db.VarChar(200)
+  exampleType         ExampleType   @map("example_type")
+  problemStatement    String?       @map("problem_statement") @db.Text
+  /// Markdown.
+  content             String        @db.Text
+  explanation         String?       @db.Text
+  codeSnippet         String?       @map("code_snippet") @db.Text
+  programmingLanguage String?       @map("programming_language") @db.VarChar(50)
+  sequenceOrder       Int           @map("sequence_order")
+  status              ContentStatus @default(DRAFT)
+  sourceId            String?       @map("source_id") @db.Uuid
+  sourceReference     String?       @map("source_reference") @db.Text
+  createdByUserId     String        @map("created_by_user_id") @db.Uuid
+  reviewedByUserId    String?       @map("reviewed_by_user_id") @db.Uuid
+  reviewedAt          DateTime?     @map("reviewed_at") @db.Timestamptz(6)
+  publishedAt         DateTime?     @map("published_at") @db.Timestamptz(6)
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  lesson     Lesson         @relation(fields: [lessonId], references: [id], onDelete: Restrict)
+  source     ContentSource? @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  createdBy  User           @relation("ExampleCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  reviewedBy User?          @relation("ExampleReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([lessonId, sequenceOrder])
+  @@index([sourceId])
+  @@index([status])
+  @@map("examples")
+}
+
+model Exercise {
+  id                       String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conceptId                String          @map("concept_id") @db.Uuid
+  title                    String          @db.VarChar(200)
+  instructions             String          @db.Text
+  exerciseType             ExerciseType    @map("exercise_type")
+  difficulty               DifficultyLevel
+  bloomLevel               BloomLevel      @map("bloom_level")
+  starterContent           String?         @map("starter_content") @db.Text
+  expectedSolution         String?         @map("expected_solution") @db.Text
+  solutionExplanation      String?         @map("solution_explanation") @db.Text
+  /// Ordered JSON array of hint texts.
+  hints                    Json            @default("[]") @db.JsonB
+  /// NULL for unscored exercises.
+  maxScore                 Decimal?        @map("max_score") @db.Decimal(8, 2)
+  estimatedDurationMinutes Int?            @map("estimated_duration_minutes")
+  sequenceOrder            Int             @map("sequence_order")
+  status                   ContentStatus   @default(DRAFT)
+  sourceId                 String?         @map("source_id") @db.Uuid
+  sourceReference          String?         @map("source_reference") @db.Text
+  createdByUserId          String          @map("created_by_user_id") @db.Uuid
+  reviewedByUserId         String?         @map("reviewed_by_user_id") @db.Uuid
+  reviewedAt               DateTime?       @map("reviewed_at") @db.Timestamptz(6)
+  publishedAt              DateTime?       @map("published_at") @db.Timestamptz(6)
+  createdAt                DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  concept    Concept        @relation(fields: [conceptId], references: [id], onDelete: Restrict)
+  source     ContentSource? @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  createdBy  User           @relation("ExerciseCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  reviewedBy User?          @relation("ExerciseReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([conceptId, sequenceOrder])
+  @@index([sourceId])
+  @@index([status])
+  @@map("exercises")
+}
+
+/// Once answered in a submitted attempt, questionText, questionType, and answerConfig are not
+/// edited in place: create a new version (previousVersionId) and archive the old one.
+model Question {
+  id                String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conceptId         String          @map("concept_id") @db.Uuid
+  /// Markdown; may include code blocks.
+  questionText      String          @map("question_text") @db.Text
+  questionType      QuestionType    @map("question_type")
+  difficulty        DifficultyLevel
+  bloomLevel        BloomLevel      @map("bloom_level")
+  /// Options, correct answer(s), and grading rules; structure depends on questionType.
+  answerConfig      Json            @map("answer_config") @db.JsonB
+  explanation       String?         @db.Text
+  defaultPoints     Decimal         @default(1) @map("default_points") @db.Decimal(6, 2)
+  version           Int             @default(1)
+  previousVersionId String?         @unique @map("previous_version_id") @db.Uuid
+  status            ContentStatus   @default(DRAFT)
+  sourceId          String?         @map("source_id") @db.Uuid
+  sourceReference   String?         @map("source_reference") @db.Text
+  createdByUserId   String          @map("created_by_user_id") @db.Uuid
+  reviewedByUserId  String?         @map("reviewed_by_user_id") @db.Uuid
+  reviewedAt        DateTime?       @map("reviewed_at") @db.Timestamptz(6)
+  publishedAt       DateTime?       @map("published_at") @db.Timestamptz(6)
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  concept         Concept        @relation(fields: [conceptId], references: [id], onDelete: Restrict)
+  source          ContentSource? @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  createdBy       User           @relation("QuestionCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  reviewedBy      User?          @relation("QuestionReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
+  previousVersion Question?      @relation("QuestionVersions", fields: [previousVersionId], references: [id], onDelete: Restrict)
+  nextVersion     Question?      @relation("QuestionVersions")
+
+  assessmentQuestions AssessmentQuestion[]
+
+  @@index([conceptId])
+  @@index([sourceId])
+  @@index([status])
+  @@map("questions")
+}
+
+// ---------------------------------------------------------------------------
+// Assessments: Quiz | Test | Examination
+// ---------------------------------------------------------------------------
+
+model Assessment {
+  id                   String               @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  courseId             String               @map("course_id") @db.Uuid
+  moduleId             String?              @map("module_id") @db.Uuid
+  topicId              String?              @map("topic_id") @db.Uuid
+  assessmentType       AssessmentType       @map("assessment_type")
+  title                String               @db.VarChar(200)
+  description          String?              @db.Text
+  instructions         String?              @db.Text
+  /// NULL = untimed.
+  timeLimitMinutes     Int?                 @map("time_limit_minutes")
+  /// NULL = unlimited attempts.
+  maxAttempts          Int?                 @map("max_attempts")
+  /// NULL = no pass/fail.
+  passPercentage       Decimal?             @map("pass_percentage") @db.Decimal(5, 2)
+  shuffleQuestions     Boolean              @default(false) @map("shuffle_questions")
+  resultsReleasePolicy ResultsReleasePolicy @map("results_release_policy")
+  availableFrom        DateTime?            @map("available_from") @db.Timestamptz(6)
+  availableUntil       DateTime?            @map("available_until") @db.Timestamptz(6)
+  status               ContentStatus        @default(DRAFT)
+  createdByUserId      String               @map("created_by_user_id") @db.Uuid
+  publishedAt          DateTime?            @map("published_at") @db.Timestamptz(6)
+  createdAt            DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime             @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  course    Course  @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  module    Module? @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+  topic     Topic?  @relation(fields: [topicId], references: [id], onDelete: Restrict)
+  createdBy User    @relation("AssessmentCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+
+  questions AssessmentQuestion[]
+  attempts  AssessmentAttempt[]
+
+  @@index([courseId])
+  @@index([moduleId])
+  @@index([topicId])
+  @@map("assessments")
+}
+
+model AssessmentQuestion {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assessmentId  String   @map("assessment_id") @db.Uuid
+  questionId    String   @map("question_id") @db.Uuid
+  sequenceOrder Int      @map("sequence_order")
+  points        Decimal  @db.Decimal(6, 2)
+  sectionLabel  String?  @map("section_label") @db.VarChar(100)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  question   Question   @relation(fields: [questionId], references: [id], onDelete: Restrict)
+
+  answers StudentAnswer[]
+
+  @@unique([assessmentId, questionId])
+  @@unique([assessmentId, sequenceOrder])
+  @@index([questionId])
+  @@map("assessment_questions")
+}
+
+model AssessmentAttempt {
+  id               String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  assessmentId     String        @map("assessment_id") @db.Uuid
+  studentId        String        @map("student_id") @db.Uuid
+  attemptNumber    Int           @map("attempt_number")
+  status           AttemptStatus @default(IN_PROGRESS)
+  startedAt        DateTime      @default(now()) @map("started_at") @db.Timestamptz(6)
+  expiresAt        DateTime?     @map("expires_at") @db.Timestamptz(6)
+  submittedAt      DateTime?     @map("submitted_at") @db.Timestamptz(6)
+  timeSpentSeconds Int?          @map("time_spent_seconds")
+  createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
+  student    Student    @relation(fields: [studentId], references: [id], onDelete: Restrict)
+
+  answers StudentAnswer[]
+  result  AssessmentResult?
+
+  @@unique([assessmentId, studentId, attemptNumber])
+  @@index([studentId])
+  @@map("assessment_attempts")
+}
+
+model StudentAnswer {
+  id                   String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  attemptId            String        @map("attempt_id") @db.Uuid
+  assessmentQuestionId String        @map("assessment_question_id") @db.Uuid
+  /// NULL = presented but not answered.
+  response             Json?         @db.JsonB
+  isCorrect            Boolean?      @map("is_correct")
+  scoreAwarded         Decimal?      @map("score_awarded") @db.Decimal(6, 2)
+  /// Snapshot of AssessmentQuestion.points at the time of the attempt.
+  maxScore             Decimal       @map("max_score") @db.Decimal(6, 2)
+  gradingStatus        GradingStatus @default(PENDING) @map("grading_status")
+  gradedByUserId       String?       @map("graded_by_user_id") @db.Uuid
+  gradedAt             DateTime?     @map("graded_at") @db.Timestamptz(6)
+  feedback             String?       @db.Text
+  timeSpentSeconds     Int?          @map("time_spent_seconds")
+  answeredAt           DateTime?     @map("answered_at") @db.Timestamptz(6)
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  attempt            AssessmentAttempt  @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+  assessmentQuestion AssessmentQuestion @relation(fields: [assessmentQuestionId], references: [id], onDelete: Restrict)
+  gradedBy           User?              @relation("StudentAnswerGradedBy", fields: [gradedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([attemptId, assessmentQuestionId])
+  @@index([assessmentQuestionId])
+  @@map("student_answers")
+}
+
+/// An academic grade for one attempt. Not copied into StudentEvidence; concept-level
+/// evidence comes from individual answers.
+model AssessmentResult {
+  id         String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  attemptId  String       @unique @map("attempt_id") @db.Uuid
+  totalScore Decimal      @map("total_score") @db.Decimal(8, 2)
+  maxScore   Decimal      @map("max_score") @db.Decimal(8, 2)
+  /// Generated by the database (totalScore / maxScore * 100). Read-only: never write this field.
+  /// The dbgenerated text must match what PostgreSQL reports, or Prisma will see drift.
+  percentage Decimal?     @default(dbgenerated("round(((total_score / NULLIF(max_score, (0)::numeric)) * (100)::numeric), 2)")) @db.Decimal(5, 2)
+  /// NULL when the assessment has no pass mark.
+  passed     Boolean?
+  status     ResultStatus @default(PROVISIONAL)
+  feedback   String?      @db.Text
+  gradedAt   DateTime?    @map("graded_at") @db.Timestamptz(6)
+  releasedAt DateTime?    @map("released_at") @db.Timestamptz(6)
+  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  attempt AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Restrict)
+
+  @@map("assessment_results")
+}
+
+// ---------------------------------------------------------------------------
+// Learning activity and observed evidence
+// ---------------------------------------------------------------------------
+
+/// Append-only interaction log. targetId is polymorphic (resolved by targetType), so it has no FK.
+model LearningActivity {
+  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId       String              @map("student_id") @db.Uuid
+  courseId        String?             @map("course_id") @db.Uuid
+  conceptId       String?             @map("concept_id") @db.Uuid
+  activityType    ActivityType        @map("activity_type")
+  targetType      ActivityTargetType? @map("target_type")
+  targetId        String?             @map("target_id") @db.Uuid
+  startedAt       DateTime?           @map("started_at") @db.Timestamptz(6)
+  endedAt         DateTime?           @map("ended_at") @db.Timestamptz(6)
+  durationSeconds Int?                @map("duration_seconds")
+  metadata        Json                @default("{}") @db.JsonB
+  occurredAt      DateTime            @map("occurred_at") @db.Timestamptz(6)
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  student Student  @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  course  Course?  @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  concept Concept? @relation(fields: [conceptId], references: [id], onDelete: Restrict)
+
+  @@index([studentId, occurredAt])
+  @@index([conceptId, occurredAt])
+  @@index([courseId])
+  @@index([targetType, targetId])
+  @@map("learning_activities")
+}
+
+/// Observed evidence only — never competency, mastery, or knowledge gaps (those belong to the
+/// Adaptive AI Tutor). Missing rows mean "not observed", not zero performance. NULL measurement
+/// fields mean "not measured" and must never be coalesced to 0.
+/// Append-only: corrections create a new row and set supersededByEvidenceId on the old one.
+/// sourceId is polymorphic (resolved by sourceType), so it has no FK.
+model StudentEvidence {
+  id                     String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  studentId              String             @map("student_id") @db.Uuid
+  conceptId              String?            @map("concept_id") @db.Uuid
+  courseId               String?            @map("course_id") @db.Uuid
+  sourceType             EvidenceSourceType @map("source_type")
+  sourceId               String             @map("source_id") @db.Uuid
+  score                  Decimal?           @db.Decimal(8, 2)
+  maxScore               Decimal?           @map("max_score") @db.Decimal(8, 2)
+  /// Generated by the database (score / maxScore * 100); NULL whenever score or maxScore is NULL.
+  /// Read-only: never write this field. The dbgenerated text must match what PostgreSQL reports.
+  percentage             Decimal?           @default(dbgenerated("\nCASE\n    WHEN ((score IS NOT NULL) AND (max_score > (0)::numeric)) THEN round(((score / max_score) * (100)::numeric), 2)\n    ELSE NULL::numeric\nEND")) @db.Decimal(5, 2)
+  attemptNumber          Int?               @map("attempt_number")
+  timeSpentSeconds       Int?               @map("time_spent_seconds")
+  hintsUsed              Int?               @map("hints_used")
+  errorsCount            Int?               @map("errors_count")
+  status                 EvidenceStatus
+  /// Context snapshot at observation time (question version, difficulty, Bloom level, ...).
+  metadata               Json               @default("{}") @db.JsonB
+  observedAt             DateTime           @map("observed_at") @db.Timestamptz(6)
+  supersededByEvidenceId String?            @unique @map("superseded_by_evidence_id") @db.Uuid
+  createdAt              DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  student      Student          @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  concept      Concept?         @relation(fields: [conceptId], references: [id], onDelete: Restrict)
+  course       Course?          @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  supersededBy StudentEvidence? @relation("EvidenceSupersession", fields: [supersededByEvidenceId], references: [id], onDelete: Restrict)
+  supersedes   StudentEvidence? @relation("EvidenceSupersession")
+
+  @@index([studentId, conceptId, observedAt])
+  @@index([studentId, observedAt])
+  @@index([conceptId])
+  @@index([sourceType, sourceId])
+  @@map("student_evidence")
+}
