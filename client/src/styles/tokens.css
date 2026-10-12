@@ -1,0 +1,48 @@
+/*
+ * SELVIA design tokens. These are the only colors the UI may use; components reference the variables,
+ * never hex values.
+ *
+ * Primary (indigo): primary buttons, active navigation, important links, selected states.
+ * Secondary (teal): learning-related indicators and sections, secondary actions.
+ * Accent (amber): sparingly, for attention, pending states and important notices.
+ * Status colors: only for their semantic meaning.
+ */
+
+:root {
+  /* Brand */
+  --color-primary: #4f46e5;
+  --color-primary-dark: #3730a3;
+  --color-primary-light: #eef2ff;
+  --color-secondary: #0f766e;
+  --color-secondary-light: #ccfbf1;
+  --color-accent: #f59e0b;
+  --color-accent-light: #fef3c7;
+
+  /* Surfaces */
+  --color-background: #f8fafc;
+  --color-surface: #ffffff;
+  --color-border: #e2e8f0;
+
+  /* Text */
+  --color-text-primary: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+  --color-text-on-primary: var(--color-surface);
+
+  /* Status */
+  --color-success: #16a34a;
+  --color-error: #dc2626;
+  --color-warning: #d97706;
+  --color-info: #0284c7;
+
+  /* Tints of the status colors for message backgrounds and borders (derived, not new colors) */
+  --color-success-light: color-mix(in srgb, var(--color-success) 10%, var(--color-surface));
+  --color-error-light: color-mix(in srgb, var(--color-error) 8%, var(--color-surface));
+  --color-error-border: color-mix(in srgb, var(--color-error) 25%, var(--color-surface));
+  --color-warning-light: color-mix(in srgb, var(--color-warning) 10%, var(--color-surface));
+  --color-info-light: color-mix(in srgb, var(--color-info) 10%, var(--color-surface));
+
+  /* Shape and elevation */
+  --radius: 8px;
+  --shadow: 0 1px 2px color-mix(in srgb, var(--color-text-primary) 6%, transparent);
+}
