@@ -4,10 +4,9 @@ import prisma from '../database/postgres/prisma.js'
 // Records outside the Course -> Module -> Topic -> Concept structure that reference it.
 // Structure is only deleted when every count is zero.
 
-// Learning materials and examples belong to lessons, so the lesson count covers them.
+// Learning materials, examples and exercises belong to lessons, so the lesson count covers them.
 const CONCEPT_DEPENDENTS = {
   lessons: true,
-  exercises: true,
   questions: true,
   learningActivities: true,
   evidence: true,
@@ -65,13 +64,16 @@ export function countConceptDependents(conceptId) {
   return sumConceptDependents({ id: conceptId })
 }
 
-// Learning activities point at lessons, materials, and examples through (target_type, target_id)
-// without a foreign key, so these counts are the only protection for them.
+// Learning activities point at lessons, materials, examples, and exercises through (target_type, target_id)
+// without a foreign key, so these counts are the only protection for them. Exercise attempts are
+// EXERCISE_SUBMITTED activities, and their evidence refers to those activities, so the activity count
+// covers attempts and evidence too.
 
 export async function countLessonDependents(lessonId) {
-  const [materials, examples] = await Promise.all([
+  const [materials, examples, exercises] = await Promise.all([
     prisma.learningMaterial.findMany({ where: { lessonId }, select: { id: true } }),
     prisma.example.findMany({ where: { lessonId }, select: { id: true } }),
+    prisma.exercise.findMany({ where: { lessonId }, select: { id: true } }),
   ])
   const learningActivities = await prisma.learningActivity.count({
     where: {
@@ -79,6 +81,7 @@ export async function countLessonDependents(lessonId) {
         { targetType: ActivityTargetType.LESSON, targetId: lessonId },
         { targetType: ActivityTargetType.LEARNING_MATERIAL, targetId: { in: materials.map((m) => m.id) } },
         { targetType: ActivityTargetType.EXAMPLE, targetId: { in: examples.map((e) => e.id) } },
+        { targetType: ActivityTargetType.EXERCISE, targetId: { in: exercises.map((e) => e.id) } },
       ],
     },
   })
@@ -95,6 +98,13 @@ export async function countMaterialDependents(materialId) {
 export async function countExampleDependents(exampleId) {
   const learningActivities = await prisma.learningActivity.count({
     where: { targetType: ActivityTargetType.EXAMPLE, targetId: exampleId },
+  })
+  return { learningActivities }
+}
+
+export async function countExerciseDependents(exerciseId) {
+  const learningActivities = await prisma.learningActivity.count({
+    where: { targetType: ActivityTargetType.EXERCISE, targetId: exerciseId },
   })
   return { learningActivities }
 }

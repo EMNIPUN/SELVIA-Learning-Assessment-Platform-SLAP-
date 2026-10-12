@@ -1,7 +1,7 @@
 # SELVIA Learning Platform — Course Knowledge Graph (Neo4j)
 
-> **Status:** Structure and synchronization foundation (Step 10.2). Nothing is synchronized automatically yet,
-> and no graph operation is exposed through the API.
+> **Status:** Explicit graph synchronization (Step 10.3). Lecturers synchronize the course hierarchy on demand
+> through the `/graph` API; nothing is synchronized automatically when PostgreSQL records change.
 
 ## 1. Responsibilities
 
@@ -60,23 +60,64 @@ Applied with `npm run graph:schema` (idempotent, `IF NOT EXISTS`):
 
 Each uniqueness constraint also provides the index `MERGE` uses to find a node by `id`.
 
-## 5. Synchronization foundation
+## 5. Synchronization
 
-Code: `server/src/services/courseGraph.service.js` (internal, no routes) and `server/src/repositories/courseGraph.repository.js` (Cypher).
+Code: `server/src/routes/v1/courseGraph.routes.js` → `controllers/courseGraph.controller.js` → `services/courseGraph.service.js` → `repositories/courseGraph.repository.js` (Cypher) and `repositories/courseHierarchy.repository.js` (PostgreSQL reads).
+
+### 5.1 API
+
+All endpoints are under `/api/v1/graph`, require a lecturer token, and act only on courses the lecturer owns (403 otherwise). Students cannot use them.
+
+| Method and path | Behaviour |
+|---|---|
+| `POST /courses/:courseId/sync` | Upserts the course node. |
+| `POST /modules/:moduleId/sync` | Upserts the module node and its `HAS_MODULE` link. |
+| `POST /topics/:topicId/sync` | Upserts the topic node and its `HAS_TOPIC` link. |
+| `POST /concepts/:conceptId/sync` | Upserts the concept node and its `HAS_CONCEPT` link. |
+| `POST /lessons/:lessonId/sync` | Upserts the lesson node and its `HAS_LESSON` link. |
+| `POST /courses/:courseId/sync-hierarchy` | Upserts the course and every module, topic, concept and lesson under it, parents first, in one transaction. |
+| `DELETE /courses/:courseId`, `/modules/:moduleId`, `/topics/:topicId`, `/concepts/:conceptId`, `/lessons/:lessonId` | Removes the node and its hierarchy descendants (§5.3). |
+
+| Status | Meaning |
+|---|---|
+| 400 | Invalid id. |
+| 401 / 403 | Not authenticated, not a lecturer, or not the course owner. |
+| 404 | The record is not in PostgreSQL (sync), or the node is not in the graph (removal). |
+| 409 | Sync: the parent node is not in the graph (`Sync the <parent> first`); missing parents are never created. Removal: the record, or one of its graph descendants, still exists in PostgreSQL. |
+| 503 | Neo4j is unavailable or not configured. |
+
+### 5.2 Upsert rules
+
+- Nodes are matched by `id` with `MERGE`, and `SET node = properties` replaces the mirrored properties with the current PostgreSQL values, so repeating any sync leaves the graph unchanged.
+- A child re-synced under a different parent loses the link to its previous parent.
+- Synchronization only touches hierarchy relationships. `PREREQUISITE_OF`, `REQUIRES` and `RELATED_TO` are never created, replaced or removed by it.
+- `sync-hierarchy` returns `synced` (count per label) and `staleNodes`: graph descendants of the course that no longer exist in PostgreSQL. Stale nodes are reported, never deleted automatically.
+
+### 5.3 Removal
+
+Removal is explicit and mirrors a deletion that has already happened in PostgreSQL:
+
+1. The record must no longer exist in PostgreSQL (409 otherwise; sync it instead to update it).
+2. The node must exist in the graph (404 otherwise).
+3. If the ancestor course still exists in PostgreSQL, only its owner may remove nodes under it. If the course itself was deleted, any lecturer may remove its leftover nodes.
+4. No hierarchy descendant may still exist in PostgreSQL (409 with the offending ids); this prevents removing nodes for content that was moved rather than deleted.
+5. The node and its hierarchy descendants are removed with `DETACH DELETE` in one transaction. This removes only relationships attached to those nodes, including knowledge relationships of removed concepts; nodes and relationships elsewhere, including other courses, are untouched.
+
+The response reports what was removed, for example `{"nodes":{"Lesson":1},"relationships":{"HAS_LESSON":1}}`.
+
+### 5.4 Knowledge relationships (internal)
+
+These service functions have no routes yet; relationships are never inferred automatically.
 
 | Function | Behaviour |
 |---|---|
-| `syncCourse(courseId)` | Reads the course from PostgreSQL and upserts its node. |
-| `syncModule` / `syncTopic` / `syncConcept` / `syncLesson(id)` | Reads the entity from PostgreSQL, upserts its node and its hierarchy relationship. The parent must already be in the graph (409 otherwise). |
 | `addPrerequisite(prerequisiteId, conceptId)` | `PREREQUISITE_OF`, rejecting cycles (409). |
 | `addRequirement(conceptId, requiredConceptId)` | `REQUIRES`, rejecting cycles (409). |
 | `addRelatedConcept(conceptId, relatedConceptId)` | `RELATED_TO`. |
 
-All writes use `MERGE`, so repeating any operation leaves the graph unchanged.
-
 ## 6. Not yet implemented
 
-- Automatic or bulk synchronization, background workers, event queues.
-- Removing nodes or relationships when PostgreSQL rows are deleted.
+- Automatic synchronization when PostgreSQL records change, background workers, event queues.
+- API endpoints for knowledge relationships.
 - Cycle detection across relationship types (each of `PREREQUISITE_OF` and `REQUIRES` is checked separately).
 - Student Knowledge Graph and anything computed from student evidence.

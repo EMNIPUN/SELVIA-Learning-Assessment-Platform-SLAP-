@@ -84,6 +84,7 @@ enum ExerciseType {
   PROBLEM_SOLVING
   DIAGRAM
   MULTI_STEP
+  MULTIPLE_CHOICE
 
   @@map("exercise_type")
 }
@@ -377,7 +378,6 @@ model Concept {
   topic Topic @relation(fields: [topicId], references: [id], onDelete: Restrict)
 
   lessons            Lesson[]
-  exercises          Exercise[]
   questions          Question[]
   learningActivities LearningActivity[]
   evidence           StudentEvidence[]
@@ -449,6 +449,7 @@ model Lesson {
 
   learningMaterials LearningMaterial[]
   examples          Example[]
+  exercises         Exercise[]
 
   @@unique([conceptId, sequenceOrder])
   @@index([sourceId])
@@ -524,9 +525,10 @@ model Example {
   @@map("examples")
 }
 
+/// Belongs to a lesson; its concept is the lesson's concept.
 model Exercise {
   id                       String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  conceptId                String          @map("concept_id") @db.Uuid
+  lessonId                 String          @map("lesson_id") @db.Uuid
   title                    String          @db.VarChar(200)
   instructions             String          @db.Text
   exerciseType             ExerciseType    @map("exercise_type")
@@ -535,6 +537,9 @@ model Exercise {
   starterContent           String?         @map("starter_content") @db.Text
   expectedSolution         String?         @map("expected_solution") @db.Text
   solutionExplanation      String?         @map("solution_explanation") @db.Text
+  /// Options and correct option (MULTIPLE_CHOICE) or accepted answers (SHORT_ANSWER), in the same
+  /// shape as Question.answerConfig. NULL for exercise types that are not evaluated automatically.
+  answerConfig             Json?           @map("answer_config") @db.JsonB
   /// Ordered JSON array of hint texts.
   hints                    Json            @default("[]") @db.JsonB
   /// NULL for unscored exercises.
@@ -551,12 +556,12 @@ model Exercise {
   createdAt                DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt                DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  concept    Concept        @relation(fields: [conceptId], references: [id], onDelete: Restrict)
+  lesson     Lesson         @relation(fields: [lessonId], references: [id], onDelete: Restrict)
   source     ContentSource? @relation(fields: [sourceId], references: [id], onDelete: Restrict)
   createdBy  User           @relation("ExerciseCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
   reviewedBy User?          @relation("ExerciseReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: Restrict)
 
-  @@unique([conceptId, sequenceOrder])
+  @@unique([lessonId, sequenceOrder])
   @@index([sourceId])
   @@index([status])
   @@map("exercises")

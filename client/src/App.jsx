@@ -1,10 +1,14 @@
+import { BrowserRouter } from 'react-router'
+import { AuthProvider } from './context/AuthContext.jsx'
+import AppRoutes from './routes/AppRoutes.jsx'
+
 function App() {
   return (
-    <main className="placeholder">
-      <h1>SELVIA</h1>
-      <p>External Education &amp; Assessment Platform</p>
-      <p className="placeholder-note">Frontend initialized. Features coming soon.</p>
-    </main>
+    <BrowserRouter>
+      <AuthProvider>
+        <AppRoutes />
+      </AuthProvider>
+    </BrowserRouter>
   )
 }
 

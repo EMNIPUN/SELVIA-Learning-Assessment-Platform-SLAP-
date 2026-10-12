@@ -68,14 +68,19 @@ export async function listExamples(user, lessonId) {
   return exampleRepository.findExamplesByLesson(lessonId, visibleChildrenFilter(user, lesson.concept.topic.module.course))
 }
 
-export async function getExample(user, exampleId) {
+// Returns the example with its lesson ancestry; hidden examples are reported as missing.
+export async function getVisibleExample(user, exampleId) {
   const example = await findExample(exampleId)
   const { lesson } = example
   const { concept } = lesson
   if (!canView(user, concept.topic.module.course, concept.topic.module, concept.topic, concept, lesson, example)) {
     throw ApiError.notFound(NOT_FOUND)
   }
-  return toExampleResponse(example)
+  return example
+}
+
+export async function getExample(user, exampleId) {
+  return toExampleResponse(await getVisibleExample(user, exampleId))
 }
 
 export async function updateExample(user, exampleId, input) {

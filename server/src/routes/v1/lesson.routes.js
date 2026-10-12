@@ -16,7 +16,7 @@ router.post('/concepts/:conceptId/lessons', lecturerOnly, validateParams(concept
 router.get('/concepts/:conceptId/lessons', authenticate, validateParams(conceptIdParams), listLessons)
 router.get('/lessons/:lessonId', authenticate, validateParams(lessonIdParams), getLesson)
 router.patch('/lessons/:lessonId', lecturerOnly, validateParams(lessonIdParams), validateBody(updateLessonSchema), updateLesson)
-// Also deletes the lesson's materials and examples; 409 if learning activity references them.
+// Also deletes the lesson's materials, examples and exercises; 409 if learning activity references them.
 router.delete('/lessons/:lessonId', lecturerOnly, validateParams(lessonIdParams), deleteLesson)
 
 export default router

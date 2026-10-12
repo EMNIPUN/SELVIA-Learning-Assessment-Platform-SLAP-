@@ -35,6 +35,17 @@ export function runCypher(cypher, params = {}, { readOnly = false } = {}) {
   })
 }
 
+// Runs several queries atomically. `work` receives the transaction and may be retried on transient
+// errors, so it must be idempotent.
+export async function runWriteTransaction(work) {
+  const session = getNeo4jDriver().session({ database: env.neo4j.database, defaultAccessMode: neo4j.session.WRITE })
+  try {
+    return await session.executeWrite(work)
+  } finally {
+    await session.close()
+  }
+}
+
 // Opens a connection to the configured database and returns the server's address and version.
 export async function verifyNeo4jConnection() {
   const info = await getNeo4jDriver().getServerInfo({ database: env.neo4j.database })

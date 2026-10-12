@@ -54,12 +54,13 @@ export function updateLesson(id, data) {
   return prisma.lesson.update({ where: { id }, data, select: LESSON_SELECT })
 }
 
-// Deletes the lesson with its learning materials and examples in one transaction.
+// Deletes the lesson with its learning materials, examples and exercises in one transaction.
 export async function deleteLessonTree(lessonId) {
-  const [materials, examples] = await prisma.$transaction([
+  const [materials, examples, exercises] = await prisma.$transaction([
     prisma.learningMaterial.deleteMany({ where: { lessonId } }),
     prisma.example.deleteMany({ where: { lessonId } }),
+    prisma.exercise.deleteMany({ where: { lessonId } }),
     prisma.lesson.delete({ where: { id: lessonId }, select: { id: true } }),
   ], DELETE_TRANSACTION_OPTIONS)
-  return { materials: materials.count, examples: examples.count }
+  return { materials: materials.count, examples: examples.count, exercises: exercises.count }
 }

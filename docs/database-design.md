@@ -138,8 +138,8 @@ Course
  │         └── Concept
  │              ├── Lesson
  │              │    ├── LearningMaterial
- │              │    └── Example
- │              ├── Exercise
+ │              │    ├── Example
+ │              │    └── Exercise
  │              └── Question
  └── Assessment (Quiz | Test | Examination)
       └── AssessmentQuestion ──► Question
@@ -166,7 +166,7 @@ erDiagram
     CONCEPT ||--o{ LESSON : "taught by"
     LESSON ||--o{ LEARNING_MATERIAL : "supported by"
     LESSON ||--o{ EXAMPLE : "illustrated by"
-    CONCEPT ||--o{ EXERCISE : "practised by"
+    LESSON ||--o{ EXERCISE : "practised by"
     CONCEPT ||--o{ QUESTION : "assessed by"
 
     CONTENT_SOURCE |o--o{ LESSON : provenance
@@ -204,7 +204,7 @@ erDiagram
 | `content_source_type` | `LECTURER_AUTHORED`, `TEXTBOOK`, `ACADEMIC_PAPER`, `WEBSITE`, `OPEN_EDUCATIONAL_RESOURCE`, `PAST_PAPER`, `AI_GENERATED`, `IMPORTED` |
 | `material_type` | `DOCUMENT`, `SLIDES`, `VIDEO`, `AUDIO`, `LINK`, `READING`, `OTHER` |
 | `example_type` | `WORKED_EXAMPLE`, `CODE_EXAMPLE`, `CASE_STUDY`, `DIAGRAM`, `COUNTER_EXAMPLE` |
-| `exercise_type` | `CODING`, `SHORT_ANSWER`, `PROBLEM_SOLVING`, `DIAGRAM`, `MULTI_STEP` |
+| `exercise_type` | `CODING`, `SHORT_ANSWER`, `PROBLEM_SOLVING`, `DIAGRAM`, `MULTI_STEP`, `MULTIPLE_CHOICE` |
 | `question_type` | `MULTIPLE_CHOICE_SINGLE`, `MULTIPLE_CHOICE_MULTIPLE`, `TRUE_FALSE`, `SHORT_ANSWER`, `FILL_IN_THE_BLANK`, `MATCHING`, `ORDERING`, `ESSAY`, `CODE` |
 | `difficulty_level` | `EASY`, `MEDIUM`, `HARD` |
 | `bloom_level` | `REMEMBER`, `UNDERSTAND`, `APPLY`, `ANALYZE`, `EVALUATE`, `CREATE` (revised Bloom's taxonomy) |
@@ -410,7 +410,7 @@ erDiagram
 
 - **Primary key:** `id`
 - **Foreign keys:** `topic_id → topics.id`
-- **Relationships:** belongs to one `Topic`; has many `Lesson`, `Exercise`, `Question`; referenced by `LearningActivity` and `StudentEvidence`.
+- **Relationships:** belongs to one `Topic`; has many `Lesson`, `Question`; referenced by `LearningActivity` and `StudentEvidence`.
 - **Constraints:** unique `code`; unique `(topic_id, name)`; unique `(topic_id, sequence_order)` (deferrable).
 - **Note:** no concept-to-concept relationships are stored here; those belong to Neo4j.
 
@@ -470,7 +470,7 @@ erDiagram
 
 - **Primary key:** `id`
 - **Foreign keys:** `concept_id → concepts.id`; `source_id → content_sources.id`; `created_by_user_id`, `reviewed_by_user_id → users.id`
-- **Relationships:** belongs to one `Concept`; has many `LearningMaterial` and `Example`; optionally references one `ContentSource`; can be the target of `LearningActivity`.
+- **Relationships:** belongs to one `Concept`; has many `LearningMaterial`, `Example`, and `Exercise`; optionally references one `ContentSource`; can be the target of `LearningActivity`.
 - **Constraints:** unique `(concept_id, sequence_order)` (deferrable); `estimated_duration_minutes > 0` when present; shared lifecycle constraints.
 
 ---
@@ -537,14 +537,14 @@ erDiagram
 
 ### 5.13 Exercise
 
-**Purpose:** Practice activities that let students apply a concept outside formal assessments. Exercise work produces learning activities and student evidence but does not contribute to course grades.
+**Purpose:** Practice activities within a lesson that let students apply its concept outside formal assessments. Its concept is the lesson's concept. Exercise work produces learning activities and student evidence but does not contribute to course grades.
 
 **Table:** `exercises`
 
 | Field | Type | Notes |
 |---|---|---|
 | `id` | `uuid` | PK |
-| `concept_id` | `uuid` | FK → `concepts.id`, `NOT NULL` (concept mapping) |
+| `lesson_id` | `uuid` | FK → `lessons.id`, `NOT NULL` |
 | `title` | `varchar(200)` | `NOT NULL` |
 | `instructions` | `text` | `NOT NULL` |
 | `exercise_type` | `exercise_type` | `NOT NULL` |
@@ -554,16 +554,29 @@ erDiagram
 | `expected_solution` | `text` | Nullable |
 | `solution_explanation` | `text` | Nullable |
 | `hints` | `jsonb` | `NOT NULL DEFAULT '[]'`; ordered array of hint texts |
+| `answer_config` | `jsonb` | Nullable; correct answer(s) for automatically evaluated types (see below); `NULL` for types that are not evaluated automatically |
 | `max_score` | `numeric(8,2)` | Nullable; `NULL` for unscored exercises |
 | `estimated_duration_minutes` | `integer` | Nullable |
 | `sequence_order` | `integer` | `NOT NULL` |
 | [Lifecycle & provenance fields] | | See section 2.6 |
 | `created_at`, `updated_at` | `timestamptz` | |
 
+**`answer_config` structure** uses the same shape as `questions.answer_config` for the matching type:
+
+```json
+// MULTIPLE_CHOICE (exactly one correct option)
+{ "options": [ { "id": "a", "text": "…" }, { "id": "b", "text": "…" } ], "correct_option_ids": ["a"] }
+
+// SHORT_ANSWER (deterministic match after trimming and collapsing whitespace)
+{ "accepted_answers": ["Vehicle", "the Vehicle class"], "case_sensitive": false }
+```
+
 - **Primary key:** `id`
-- **Foreign keys:** `concept_id → concepts.id`; `source_id → content_sources.id`; `created_by_user_id`, `reviewed_by_user_id → users.id`
-- **Relationships:** belongs to one `Concept`; optionally references one `ContentSource`; can be the target of `LearningActivity`; exercise submissions generate `StudentEvidence`.
-- **Constraints:** `max_score > 0` when present; `hints` must be a JSON array; unique `(concept_id, sequence_order)` (deferrable); shared lifecycle constraints.
+- **Foreign keys:** `lesson_id → lessons.id`; `source_id → content_sources.id`; `created_by_user_id`, `reviewed_by_user_id → users.id`
+- **Relationships:** belongs to one `Lesson`; optionally references one `ContentSource`; can be the target of `LearningActivity`; exercise submissions generate `StudentEvidence`.
+- **Constraints:** `max_score > 0` when present; `hints` must be a JSON array; `answer_config` must be a JSON object when present; unique `(lesson_id, sequence_order)`; shared lifecycle constraints. The `answer_config` structure is validated per `exercise_type` by the application.
+- **Submissions:** each submission is an `EXERCISE_SUBMITTED` `LearningActivity` (`target_type = 'EXERCISE'`) whose `metadata` holds `attempt_number`, the response (`selected_option_id` or `answer_text`), `is_correct`, `score`, and `max_score`. The same transaction writes one `EXERCISE_SUBMISSION` `StudentEvidence` row (`source_id` = the activity id, `status = 'COMPLETED'`) with `score`, `max_score`, `attempt_number`, and a `metadata` snapshot of `exercise_id`, `lesson_id`, `exercise_type`, `difficulty`, `bloom_level`, and `is_correct`. `time_spent_seconds` is left `NULL` because it is not measured.
+- **Note:** `answer_config` and `solution_explanation` are only returned to the owning lecturer. Students receive the options without the correct answer, and the explanation only with the result of a submission.
 
 ---
 

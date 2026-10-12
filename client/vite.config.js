@@ -11,5 +11,9 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // The API has no CORS configuration, so the dev server forwards API calls to it.
+    proxy: {
+      '/api': 'http://localhost:5000',
+    },
   },
 })

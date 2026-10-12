@@ -83,14 +83,19 @@ export async function listMaterials(user, lessonId) {
   return materials.map(toMaterialResponse)
 }
 
-export async function getMaterial(user, materialId) {
+// Returns the material with its lesson ancestry; hidden materials are reported as missing.
+export async function getVisibleMaterial(user, materialId) {
   const material = await findMaterial(materialId)
   const { lesson } = material
   const { concept } = lesson
   if (!canView(user, concept.topic.module.course, concept.topic.module, concept.topic, concept, lesson, material)) {
     throw ApiError.notFound(NOT_FOUND)
   }
-  return toMaterialResponse(material)
+  return material
+}
+
+export async function getMaterial(user, materialId) {
+  return toMaterialResponse(await getVisibleMaterial(user, materialId))
 }
 
 export async function updateMaterial(user, materialId, input) {
