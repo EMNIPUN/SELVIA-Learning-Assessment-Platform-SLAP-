@@ -1,6 +1,6 @@
 import { ApiError } from '../utils/ApiError.js'
 
-function parseOrThrow(schema, input) {
+export function parseOrThrow(schema, input) {
   const result = schema.safeParse(input)
 
   if (!result.success) {
