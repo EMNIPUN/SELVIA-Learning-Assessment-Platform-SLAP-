@@ -19,7 +19,13 @@
     "db:status": "prisma migrate status",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
-    "graph:schema": "node scripts/graph-schema.js"
+    "graph:schema": "node scripts/graph-schema.js",
+    "test:db-guard": "node --test tests/testDatabaseGuard.test.js tests/prismaTestConfig.test.js tests/testDatabaseIdentity.test.js tests/postgresEnvironment.test.js tests/testDatabaseMigration.test.js",
+    "test:db:check": "node scripts/check-test-database.js",
+    "test:db:verify": "node scripts/verify-test-database.js",
+    "test:db:migrate": "node scripts/migrate-test-database.js",
+    "test:integration:runner": "node --test tests/integrationRunner.test.js tests/integrationEntry.test.js tests/testEnvironmentIsolation.test.js",
+    "test:integration:safe": "node tests/run-integration-tests.js"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",

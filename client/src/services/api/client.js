@@ -27,6 +27,16 @@ async function readJson(response) {
   }
 }
 
+// "?name=value&…" for list filters, or '' when there are none. Empty values are not sent.
+export function queryString(filters) {
+  const params = new URLSearchParams()
+  for (const [name, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== null && value !== '') params.set(name, String(value))
+  }
+  const query = params.toString()
+  return query ? `?${query}` : ''
+}
+
 // `authenticated: false` sends no token, for endpoints such as login.
 export async function apiRequest(path, { method = 'GET', body, signal, authenticated = true } = {}) {
   const token = authenticated ? getToken() : null

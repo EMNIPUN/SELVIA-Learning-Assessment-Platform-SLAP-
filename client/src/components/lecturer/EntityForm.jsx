@@ -13,8 +13,9 @@ function sameValue(a, b) {
 
 // A create or edit form described by `fields`, in form order:
 //   { name, label, type: 'text' | 'textarea' | 'select' | 'radio' | 'custom', required, maxLength, hint,
-//     options: [{ value, label }], inputMode, spellCheck, rows, row, code, render, nestedError }
+//     options: [{ value, label }], inputMode, inputType, spellCheck, rows, row, code, render, nestedError }
 // `code: true` shows a textarea in a fixed-width font without spelling or capitalisation corrections.
+// `inputType` replaces the "text" type of a single-line field, for example "datetime-local".
 // A 'custom' field is a group labelled by its legend whose controls come from
 // `render({ id, value, onChange(value | current => value), invalid, ref })`; `ref` receives an object with a
 // focus() method.
@@ -197,7 +198,7 @@ export default function EntityForm({
     return (
       <input
         {...props}
-        type="text"
+        type={field.inputType ?? 'text'}
         autoComplete="off"
         inputMode={field.inputMode}
         spellCheck={field.spellCheck}

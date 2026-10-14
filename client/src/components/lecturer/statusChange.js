@@ -37,8 +37,10 @@ export function needsConfirmation(current, next) {
 // What setting an item to `next` does, as the API implements it.
 // `ancestors`: the items above it, nearest last, as [{ noun, name, status }]. `contains`: what is inside it, for
 // example "its topics, concepts and lessons". `hiddenNote`: what else students lose while it is not published.
+// `effects`: { [status]: text } for items students never open directly, such as question bank questions.
 // Students see an item only while it and everything above it are published; statuses never cascade.
-export function statusEffect(next, { noun, ancestors = [], contains, hiddenNote }) {
+export function statusEffect(next, { noun, ancestors = [], contains, hiddenNote, effects }) {
+  if (effects) return effects[next]
   if (next === PUBLISHED) {
     const above = ancestors.map((ancestor) => ancestor.noun)
     const visibility =

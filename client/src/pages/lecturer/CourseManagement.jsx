@@ -5,6 +5,7 @@ import ErrorState from '../../components/ErrorState.jsx'
 import LoadingState from '../../components/LoadingState.jsx'
 import StatusBadge from '../../components/StatusBadge.jsx'
 import CourseStructure from '../../components/lecturer/CourseStructure.jsx'
+import QuizList from '../../components/lecturer/QuizList.jsx'
 import StatusChangeDialog from '../../components/lecturer/StatusChangeDialog.jsx'
 import { ROUTES } from '../../constants/routes.js'
 import { STRUCTURE_STATUSES } from '../../constants/structureStatus.js'
@@ -148,6 +149,8 @@ export default function CourseManagement() {
       </div>
 
       <CourseStructure course={course} modules={modules} updateModules={updateModules} />
+
+      <QuizList course={course} />
 
       {changingStatus && (
         <StatusChangeDialog

@@ -1,17 +1,11 @@
 import { ExerciseType } from '@prisma/client'
 import { ApiError } from '../utils/ApiError.js'
+import { normaliseShortAnswer } from '../utils/shortAnswer.js'
 
 // Deterministic evaluation against the answer configuration the lecturer defined; no AI grading. The result
 // says whether this answer was right, nothing about the student's ability.
 
 const invalidAnswer = (field, message) => ApiError.badRequest('Validation failed', [{ field, message }])
-
-// Short answers are compared after Unicode normalisation, trimming and collapsing runs of whitespace, and
-// ignoring case unless the exercise is case-sensitive.
-function normaliseShortAnswer(text, caseSensitive) {
-  const normalised = text.normalize('NFC').trim().replace(/\s+/g, ' ')
-  return caseSensitive ? normalised : normalised.toLowerCase()
-}
 
 // Each evaluator returns the response as stored in the attempt and whether it is correct.
 const EVALUATORS = {

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useApiRequest } from '../../hooks/useApiRequest.js'
 import { listConcepts, listTopics } from '../../services/api/course.api.js'
 import { listExamples, listExercises, listLessons, listMaterials } from '../../services/api/lesson.api.js'
+import QuestionBank from './QuestionBank.jsx'
 import { StructureFeedbackContext } from './structureFeedback.js'
 import {
   CONCEPT_KIND,
@@ -18,9 +19,10 @@ import StructureList from './StructureList.jsx'
 const ancestorOf = (kind, item) => ({ noun: kind.noun, name: kind.nameOf(item), status: item.status })
 
 // A course's modules → topics → concepts → lessons → learning materials, examples and practice exercises for
-// its owner to manage. Modules come with the course; each module's topics, each topic's concepts, each
-// concept's lessons and each lesson's materials are loaded the first time it is expanded, and a lesson's
-// examples and practice exercises the first time their section is opened. Loaded lists are kept after that.
+// its owner to manage, with each concept's question bank. Modules come with the course; each module's topics,
+// each topic's concepts, each concept's lessons and each lesson's materials are loaded the first time it is
+// expanded, and a lesson's examples and practice exercises and a concept's questions the first time their
+// section is opened. Loaded lists are kept after that.
 // Each list knows the statuses of everything above it, as currently shown on the page.
 export default function CourseStructure({ course, modules, updateModules }) {
   const [feedback, setFeedback] = useState(null)
@@ -33,7 +35,7 @@ export default function CourseStructure({ course, modules, updateModules }) {
         parentId={course.id}
         ancestors={ancestors}
         headingLevel={2}
-        intro="Expand a module to manage its topics, a topic its concepts, a concept its lessons, and a lesson its learning materials, examples and practice exercises."
+        intro="Expand a module to manage its topics, a topic its concepts, a concept its lessons and questions, and a lesson its learning materials, examples and practice exercises."
         items={modules}
         updateItems={updateModules}
         renderChildren={(module) => <TopicList module={module} ancestors={[...ancestors, ancestorOf(MODULE_KIND, module)]} />}
@@ -82,7 +84,10 @@ function ConceptList({ topic, ancestors }) {
       onRetry={reload}
       updateItems={updateData}
       renderChildren={(concept) => (
-        <LessonList concept={concept} ancestors={[...ancestors, ancestorOf(CONCEPT_KIND, concept)]} />
+        <>
+          <LessonList concept={concept} ancestors={[...ancestors, ancestorOf(CONCEPT_KIND, concept)]} />
+          <QuestionBank concept={concept} headingLevel={8} />
+        </>
       )}
     />
   )

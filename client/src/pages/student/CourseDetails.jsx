@@ -1,5 +1,6 @@
 import { Link, useParams } from 'react-router'
 import CourseHierarchy from '../../components/CourseHierarchy.jsx'
+import CourseQuizzes from '../../components/CourseQuizzes.jsx'
 import EmptyState from '../../components/EmptyState.jsx'
 import ErrorState from '../../components/ErrorState.jsx'
 import LoadingState from '../../components/LoadingState.jsx'
@@ -87,6 +88,11 @@ export default function CourseDetails() {
           )}
         </dl>
       </header>
+
+      <section className="page-section">
+        <h2>Quizzes</h2>
+        <CourseQuizzes courseId={course.id} />
+      </section>
 
       <section className="page-section">
         <h2>Course structure</h2>

@@ -108,3 +108,18 @@ export async function countExerciseDependents(exerciseId) {
   })
   return { learningActivities }
 }
+
+// Student answers, and the evidence derived from them, refer to a question through its assessment entries,
+// so the assessment count covers them.
+export function countQuestionAssessmentUses(questionId) {
+  return prisma.assessmentQuestion.count({ where: { questionId } })
+}
+
+export async function countQuestionDependents(questionId) {
+  const [assessmentQuestions, learningActivities, laterVersions] = await Promise.all([
+    countQuestionAssessmentUses(questionId),
+    prisma.learningActivity.count({ where: { targetType: ActivityTargetType.QUESTION, targetId: questionId } }),
+    prisma.question.count({ where: { previousVersionId: questionId } }),
+  ])
+  return { assessmentQuestions, learningActivities, laterVersions }
+}

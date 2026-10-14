@@ -57,6 +57,28 @@ export function checkHttpUrl(value, label) {
   if (url.username || url.password) return `${label} must not contain a user name or password`
 }
 
+const DECIMAL_PATTERN = /^[-+]?(\d+(\.\d*)?|\.\d+)$/
+
+// A number with at most 2 decimal places between `min` and `max`; `exclusiveMin` refuses `min` itself.
+export function checkDecimal(value, label, { min, max, exclusiveMin = false, required = false }) {
+  const text = value.trim()
+  if (!text) return required ? `${label} is required` : undefined
+  if (!DECIMAL_PATTERN.test(text)) return `${label} must be a number`
+  const number = Number(text)
+  if (exclusiveMin ? number <= min : number < min) return `${label} must be ${exclusiveMin ? 'greater than' : 'at least'} ${min}`
+  if (number > max) return `${label} must be at most ${max}`
+  if (/\.\d{3,}$/.test(text)) return `${label} can have at most 2 decimal places`
+}
+
+// The value of a datetime-local input ("2026-10-20T08:00"), which browsers without one leave as typed text.
+export function checkDateTime(value, label) {
+  const text = value.trim()
+  if (!text) return undefined
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(text) || Number.isNaN(new Date(text).getTime())) {
+    return `${label} must be a date and time`
+  }
+}
+
 export function checkOneOf(value, allowed, message) {
   if (!allowed.includes(value)) return message
 }
