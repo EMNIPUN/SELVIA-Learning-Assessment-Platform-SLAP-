@@ -20,7 +20,7 @@
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
     "graph:schema": "node scripts/graph-schema.js",
-    "test:unit": "node --test tests/studentEvidence.test.js",
+    "test:unit": "node --test tests/studentEvidence.test.js tests/learningActivityQuery.test.js tests/tutorToken.test.js tests/tutorFacingContract.test.js tests/mcpServer.unit.test.js tests/externalIdentity.unit.test.js tests/tutorAccessToken.unit.test.js",
     "test:db-guard": "node --test tests/testDatabaseGuard.test.js tests/prismaTestConfig.test.js tests/testDatabaseIdentity.test.js tests/postgresEnvironment.test.js tests/testDatabaseMigration.test.js",
     "test:db:check": "node scripts/check-test-database.js",
     "test:db:verify": "node scripts/verify-test-database.js",

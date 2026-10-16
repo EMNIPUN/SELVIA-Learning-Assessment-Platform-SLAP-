@@ -272,6 +272,34 @@ erDiagram
 
 ---
 
+### 5.2.1 External identity
+
+**Purpose:** Verified binding from an external IdP identity (`issuer` + `subject`, e.g. Keycloak) to a platform `User`. Used later for Core API–mediated tutor-token minting. Links are created only after an explicit trusted administrative verification step; email and student-number matching must never create a link.
+
+**Table:** `external_identities`
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | `uuid` | PK |
+| `issuer` | `varchar(512)` | `NOT NULL`, immutable IdP issuer |
+| `subject` | `varchar(255)` | `NOT NULL`, immutable IdP subject (`sub`) |
+| `user_id` | `uuid` | FK → `users.id`, `NOT NULL` |
+| `link_method` | `external_identity_link_method` | Currently `ADMIN_VERIFIED` only |
+| `linked_at` | `timestamptz` | When the active link was created |
+| `linked_by_user_id` | `uuid` | FK → `users.id`; administrative actor |
+| `revoked_at` | `timestamptz` | Nullable; set on soft revoke |
+| `revoked_by_user_id` | `uuid` | Nullable FK → `users.id`; required when revoked |
+| `created_at`, `updated_at` | `timestamptz` | |
+
+- **Foreign keys:** `user_id`, `linked_by_user_id`, `revoked_by_user_id` → `users.id` (`ON DELETE RESTRICT`)
+- **Active uniqueness (partial indexes, `WHERE revoked_at IS NULL`):**
+  - unique `(issuer, subject)` among active rows
+  - unique `(user_id, issuer)` among active rows (at most one active Keycloak identity per user per issuer)
+- **Revocation policy:** soft-revoke retains the row for audit; re-linking the same issuer/subject creates a **new** row after revocation.
+- **Not in this table:** email, student number, tutor tokens, or automatic linking.
+
+---
+
 ### 5.3 Lecturer
 
 **Purpose:** Lecturer-specific profile linked to a `User`. Owns courses and authors/reviews content and assessments.

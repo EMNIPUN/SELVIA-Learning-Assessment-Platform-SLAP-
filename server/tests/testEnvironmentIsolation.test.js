@@ -13,6 +13,7 @@ import { PRELOAD_PATH } from './support/integrationRunner.js'
 import {
   assertIsolatedTestEnv,
   createIsolatedTestEnv,
+  ISOLATED_MCP_RESOURCE_URL,
   ISOLATED_VARIABLES,
   NEO4J_CONNECTION_VARIABLES,
   TestEnvironmentError,
@@ -24,6 +25,8 @@ const FILE_VALUES = {
   NEO4J_USERNAME: 'synthetic_file_user',
   NEO4J_PASSWORD: 'Synthetic-File-Graph-Password-42',
   JWT_SECRET: 'Synthetic-File-Jwt-Secret-abcdefghijklmnopqrstuvwxyz',
+  MCP_TUTOR_TOKEN_SECRET: 'Synthetic-File-Tutor-Secret-abcdefghijklmnopqrstuvwxyz',
+  MCP_RESOURCE_URL: 'http://localhost:5000/mcp',
 }
 const LOCAL_URL = 'postgresql://isolation_user:Synthetic-Isolation-Secret-08@localhost:5432/selvia_test'
 const REMOTE_URL = 'postgresql://file_user:Synthetic-File-Db-Secret-13@db.example.com:5432/postgres'
@@ -34,13 +37,17 @@ function assertNoValues(text, values) {
 }
 
 describe('isolated test settings', () => {
-  it('switch Neo4j off and generate a new JWT secret each time', () => {
+  it('switch Neo4j off and generate a new JWT and tutor MCP secrets each time', () => {
     const first = createIsolatedTestEnv()
     const second = createIsolatedTestEnv()
     assert.deepEqual(Object.keys(first).sort(), [...ISOLATED_VARIABLES].sort())
     for (const name of NEO4J_CONNECTION_VARIABLES) assert.equal(first[name], '')
     assert.match(first.JWT_SECRET, /^[A-Za-z0-9_-]{64}$/)
+    assert.match(first.MCP_TUTOR_TOKEN_SECRET, /^[A-Za-z0-9_-]{64}$/)
+    assert.equal(first.MCP_RESOURCE_URL, ISOLATED_MCP_RESOURCE_URL)
+    assert.notEqual(first.JWT_SECRET, first.MCP_TUTOR_TOKEN_SECRET)
     assert.notEqual(first.JWT_SECRET, second.JWT_SECRET)
+    assert.notEqual(first.MCP_TUTOR_TOKEN_SECRET, second.MCP_TUTOR_TOKEN_SECRET)
     assert.doesNotThrow(() => assertIsolatedTestEnv(first))
   })
 
@@ -50,19 +57,31 @@ describe('isolated test settings', () => {
       cases.push([name, undefined], [name, FILE_VALUES[name]], [name, ' '])
     }
     cases.push(['JWT_SECRET', undefined], ['JWT_SECRET', ''], ['JWT_SECRET', 'change-this-in-production'])
+    cases.push(
+      ['MCP_TUTOR_TOKEN_SECRET', undefined],
+      ['MCP_TUTOR_TOKEN_SECRET', ''],
+      ['MCP_TUTOR_TOKEN_SECRET', 'short'],
+      ['MCP_RESOURCE_URL', undefined],
+      ['MCP_RESOURCE_URL', ''],
+      ['MCP_RESOURCE_URL', FILE_VALUES.MCP_RESOURCE_URL],
+    )
     for (const [name, value] of cases) {
       const env = { ...createIsolatedTestEnv(), [name]: value }
       assert.throws(
         () => assertIsolatedTestEnv(env),
         (err) => {
           assert.ok(err instanceof TestEnvironmentError)
-          assert.ok(err.message.includes(name))
+          assert.ok(err.message.includes(name) || err.message.includes('MCP_'), err.message)
           if (value?.trim()) assert.ok(!err.message.includes(value), 'the message contains the value')
           return true
         },
         `${name}=${JSON.stringify(value)}`,
       )
     }
+
+    const sameSecret = createIsolatedTestEnv()
+    sameSecret.MCP_TUTOR_TOKEN_SECRET = sameSecret.JWT_SECRET
+    assert.throws(() => assertIsolatedTestEnv(sameSecret), /MCP_TUTOR_TOKEN_SECRET must differ from JWT_SECRET/)
   })
 
   it('detect a later change, removal or replacement, without revealing a value', () => {

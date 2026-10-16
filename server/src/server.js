@@ -1,5 +1,5 @@
 import env from './config/env.js'
-import app from './app.js'
+import app, { mcpLifecycle } from './app.js'
 import { checkDatabaseConnection } from './database/postgres/prisma.js'
 import { closeNeo4jDriver, isNeo4jConfigured, verifyNeo4jConnection } from './database/neo4j/driver.js'
 
@@ -56,6 +56,11 @@ async function shutdown(signal) {
   setTimeout(() => process.exit(1), SHUTDOWN_TIMEOUT_MS).unref()
 
   await new Promise((resolve) => server.close(resolve))
+  try {
+    await mcpLifecycle.close()
+  } catch (err) {
+    console.error('Failed to close the MCP handler:', err.message)
+  }
   try {
     await closeNeo4jDriver()
   } catch (err) {

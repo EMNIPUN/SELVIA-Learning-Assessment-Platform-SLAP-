@@ -205,6 +205,14 @@ enum EvidenceStatus {
   @@map("evidence_status")
 }
 
+/// How an external identity was bound to a platform user. Only ADMIN_VERIFIED is supported
+/// in this foundation step; email/student-number auto-linking is intentionally absent.
+enum ExternalIdentityLinkMethod {
+  ADMIN_VERIFIED
+
+  @@map("external_identity_link_method")
+}
+
 // ---------------------------------------------------------------------------
 // Users and profiles
 // ---------------------------------------------------------------------------
@@ -225,6 +233,10 @@ model User {
   student  Student?
   lecturer Lecturer?
 
+  externalIdentities        ExternalIdentity[] @relation("ExternalIdentitySubjectUser")
+  externalIdentitiesLinked  ExternalIdentity[] @relation("ExternalIdentityLinkedBy")
+  externalIdentitiesRevoked ExternalIdentity[] @relation("ExternalIdentityRevokedBy")
+
   contentSourcesCreated     ContentSource[]    @relation("ContentSourceCreatedBy")
   lessonsCreated            Lesson[]           @relation("LessonCreatedBy")
   lessonsReviewed           Lesson[]           @relation("LessonReviewedBy")
@@ -240,6 +252,33 @@ model User {
   answersGraded             StudentAnswer[]    @relation("StudentAnswerGradedBy")
 
   @@map("users")
+}
+
+/// Verified binding from an external IdP identity (issuer + subject) to a platform User.
+/// Active uniqueness is enforced in the migration with partial unique indexes
+/// (WHERE revoked_at IS NULL): one active (issuer, subject), and one active Keycloak
+/// identity per user per issuer. Revoked rows are retained for audit; re-link creates a new row.
+/// Prisma cannot express those partial uniques in-schema; see the migration SQL.
+model ExternalIdentity {
+  id               String                      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  issuer           String                      @db.VarChar(512)
+  subject          String                      @db.VarChar(255)
+  userId           String                      @map("user_id") @db.Uuid
+  linkMethod       ExternalIdentityLinkMethod  @map("link_method")
+  linkedAt         DateTime                    @default(now()) @map("linked_at") @db.Timestamptz(6)
+  linkedByUserId   String                      @map("linked_by_user_id") @db.Uuid
+  revokedAt        DateTime?                   @map("revoked_at") @db.Timestamptz(6)
+  revokedByUserId  String?                     @map("revoked_by_user_id") @db.Uuid
+  createdAt        DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime                    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user         User  @relation("ExternalIdentitySubjectUser", fields: [userId], references: [id], onDelete: Restrict)
+  linkedByUser User  @relation("ExternalIdentityLinkedBy", fields: [linkedByUserId], references: [id], onDelete: Restrict)
+  revokedByUser User? @relation("ExternalIdentityRevokedBy", fields: [revokedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([issuer, subject], map: "external_identities_issuer_subject_idx")
+  @@index([userId, issuer], map: "external_identities_user_id_issuer_idx")
+  @@map("external_identities")
 }
 
 model Student {

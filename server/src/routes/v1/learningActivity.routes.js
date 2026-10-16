@@ -15,7 +15,8 @@ const studentOnly = [authenticate, requireRole(ROLES.STUDENT)]
 // The target must be visible to the student (404 otherwise); course, concept and occurredAt are set
 // by the server.
 router.post('/learning-activities', studentOnly, validateBody(createLearningActivitySchema), recordActivity)
-// Newest first. Query: optional limit (1–200, default 50).
+// Newest first. Query: optional courseId, activityType, targetType, occurredFrom, occurredTo, limit (1–200, default 50).
+// The student id comes from the token, never from the query.
 router.get('/learning-activities/me', studentOnly, validateQuery(listMyActivitiesQuerySchema), listMyActivities)
 
 export default router

@@ -9,6 +9,7 @@ import courseGraphRoutes from './courseGraph.routes.js'
 import exampleRoutes from './example.routes.js'
 import exerciseRoutes from './exercise.routes.js'
 import healthRoutes from './health.routes.js'
+import internalRoutes from './internal/index.js'
 import learningActivityRoutes from './learningActivity.routes.js'
 import learningMaterialRoutes from './learningMaterial.routes.js'
 import lessonRoutes from './lesson.routes.js'
@@ -21,6 +22,8 @@ const router = Router()
 router.use('/health', healthRoutes)
 router.use('/auth', authRoutes)
 router.use('/graph', courseGraphRoutes)
+// Trusted service callers only (e.g. J26 Core API). Not for browsers or student JWTs.
+router.use('/internal', internalRoutes)
 
 // Course structure and learning content routers declare full paths because nested routes span two
 // resources (for example /courses/:courseId/modules lives with the module routes).
