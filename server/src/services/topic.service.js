@@ -4,6 +4,7 @@ import { ApiError } from '../utils/ApiError.js'
 import { isForeignKeyViolation, translatePrismaError } from '../utils/prismaErrors.js'
 import { assertCourseOwner, canView, visibleChildrenFilter } from './courseAccess.service.js'
 import { assertNoDependents, deletionBlocked } from './deletionGuard.service.js'
+import { removeTopicFromGraph, syncTopicToGraph } from './graphAutoSync.service.js'
 import { getOwnedModule, getVisibleModule } from './module.service.js'
 
 const NOT_FOUND = 'Topic not found'
@@ -44,7 +45,9 @@ export async function createTopic(user, moduleId, input) {
   const sequenceOrder = input.sequenceOrder ?? (await topicRepository.findMaxSequenceOrder(moduleId)) + 1
 
   try {
-    return await topicRepository.createTopic({ ...input, moduleId, sequenceOrder })
+    const topic = await topicRepository.createTopic({ ...input, moduleId, sequenceOrder })
+    await syncTopicToGraph(topic)
+    return topic
   } catch (err) {
     throw translatePrismaError(err, { conflicts: TOPIC_CONFLICTS })
   }
@@ -63,7 +66,9 @@ export async function updateTopic(user, topicId, input) {
   await getOwnedTopic(user, topicId)
 
   try {
-    return await topicRepository.updateTopic(topicId, input)
+    const topic = await topicRepository.updateTopic(topicId, input)
+    await syncTopicToGraph(topic)
+    return topic
   } catch (err) {
     throw translatePrismaError(err, { conflicts: TOPIC_CONFLICTS, notFound: NOT_FOUND })
   }
@@ -74,7 +79,9 @@ export async function deleteTopic(user, topicId) {
   assertNoDependents('topic', await dependencyRepository.countTopicDependents(topicId))
 
   try {
-    return await topicRepository.deleteTopicTree(topicId)
+    const result = await topicRepository.deleteTopicTree(topicId)
+    await removeTopicFromGraph(topicId)
+    return result
   } catch (err) {
     if (isForeignKeyViolation(err)) {
       throw deletionBlocked('topic')

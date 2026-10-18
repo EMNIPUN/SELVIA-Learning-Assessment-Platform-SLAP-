@@ -35,6 +35,47 @@ function loadMcpTutorAuth(jwtSecret) {
   return { configured: true, secret, audience, issuer }
 }
 
+function loadKeycloakAuth() {
+  const issuer = (process.env.KEYCLOAK_ISSUER || '').trim().replace(/\/+$/, '')
+  const allowedClients = (process.env.KEYCLOAK_ALLOWED_CLIENTS || 'slap-frontend')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+  const clientId = (process.env.KEYCLOAK_CLIENT_ID || allowedClients[0] || 'slap-frontend').trim()
+  const jwksUrl =
+    (process.env.KEYCLOAK_JWKS_URL || '').trim() ||
+    (issuer ? `${issuer}/protocol/openid-connect/certs` : undefined)
+  const tokenUrl =
+    (process.env.KEYCLOAK_TOKEN_URL || '').trim() ||
+    (issuer ? `${issuer}/protocol/openid-connect/token` : undefined)
+  const allowedRedirectUris = (process.env.KEYCLOAK_REDIRECT_URIS || 'http://localhost:5174/login')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)
+
+  if (!issuer || !jwksUrl || allowedClients.length === 0 || !clientId) {
+    return {
+      configured: false,
+      issuer: undefined,
+      jwksUrl: undefined,
+      tokenUrl: undefined,
+      clientId: undefined,
+      allowedClients: [],
+      allowedRedirectUris: [],
+    }
+  }
+
+  return {
+    configured: true,
+    issuer,
+    jwksUrl,
+    tokenUrl,
+    clientId,
+    allowedClients,
+    allowedRedirectUris,
+  }
+}
+
 const jwtSecret = process.env.JWT_SECRET
 const mcpTutor = loadMcpTutorAuth(jwtSecret)
 
@@ -44,6 +85,10 @@ const env = {
   databaseUrl: process.env.DATABASE_URL,
   jwtSecret,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1d',
+  allowLocalPasswordLogin: process.env.ALLOW_LOCAL_PASSWORD_LOGIN === 'true',
+  keycloak: loadKeycloakAuth(),
+  // SELVIA Core API — used to resolve student/lecturer role after onboarding.
+  selviaCoreBaseUrl: (process.env.SELVIA_CORE_BASE_URL || '').trim().replace(/\/+$/, '') || undefined,
   neo4j: {
     uri: process.env.NEO4J_URI,
     username: process.env.NEO4J_USERNAME,

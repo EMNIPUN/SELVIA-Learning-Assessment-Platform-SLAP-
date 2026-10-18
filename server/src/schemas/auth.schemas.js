@@ -71,3 +71,20 @@ export const loginSchema = z.object({
     .min(1, 'Password is required')
     .max(1024, 'Password is too long'),
 })
+
+// Browser sends either a Keycloak access token (legacy) or an authorization code + PKCE verifier.
+export const keycloakExchangeSchema = z
+  .object({
+    accessToken: z.string().trim().min(1).max(16_384).optional(),
+    code: z.string().trim().min(1).max(4096).optional(),
+    redirectUri: z.string().trim().url().max(2048).optional(),
+    codeVerifier: z.string().trim().min(43).max(128).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.accessToken) return
+    if (data.code && data.redirectUri && data.codeVerifier) return
+    ctx.addIssue({
+      code: 'custom',
+      message: 'Provide accessToken, or code + redirectUri + codeVerifier',
+    })
+  })

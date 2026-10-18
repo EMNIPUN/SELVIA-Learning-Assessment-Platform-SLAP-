@@ -7,6 +7,7 @@ import { lifecycleChanges, NEW_CONTENT } from './contentLifecycle.service.js'
 import { resolveSourceReference } from './contentSource.service.js'
 import { assertCourseOwner, canView, visibleChildrenFilter } from './courseAccess.service.js'
 import { assertNoDependents } from './deletionGuard.service.js'
+import { removeLessonFromGraph, syncLessonToGraph } from './graphAutoSync.service.js'
 
 const NOT_FOUND = 'Lesson not found'
 
@@ -50,7 +51,7 @@ export async function createLesson(user, conceptId, input) {
   const sequenceOrder = fields.sequenceOrder ?? (await lessonRepository.findMaxSequenceOrder(conceptId)) + 1
 
   try {
-    return await lessonRepository.createLesson({
+    const lesson = await lessonRepository.createLesson({
       ...fields,
       conceptId,
       sequenceOrder,
@@ -58,6 +59,8 @@ export async function createLesson(user, conceptId, input) {
       createdByUserId: user.id,
       ...lifecycleChanges(user, status, NEW_CONTENT, source?.sourceType),
     })
+    await syncLessonToGraph(lesson)
+    return lesson
   } catch (err) {
     throw translatePrismaError(err, { conflicts: LESSON_CONFLICTS })
   }
@@ -79,11 +82,13 @@ export async function updateLesson(user, lessonId, input) {
   const sourceType = source === undefined ? lesson.source?.sourceType : source?.sourceType
 
   try {
-    return await lessonRepository.updateLesson(lessonId, {
+    const updated = await lessonRepository.updateLesson(lessonId, {
       ...fields,
       ...(source !== undefined && { sourceId: source?.id ?? null }),
       ...lifecycleChanges(user, status, lesson, sourceType),
     })
+    await syncLessonToGraph(updated)
+    return updated
   } catch (err) {
     throw translatePrismaError(err, { conflicts: LESSON_CONFLICTS, notFound: NOT_FOUND })
   }
@@ -94,7 +99,9 @@ export async function deleteLesson(user, lessonId) {
   assertNoDependents('lesson', await dependencyRepository.countLessonDependents(lessonId))
 
   try {
-    return await lessonRepository.deleteLessonTree(lessonId)
+    const result = await lessonRepository.deleteLessonTree(lessonId)
+    await removeLessonFromGraph(lessonId)
+    return result
   } catch (err) {
     throw translatePrismaError(err, { notFound: NOT_FOUND })
   }

@@ -1,4 +1,10 @@
 import { createContext, useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  beginKeycloakLogin,
+  isKeycloakConfigured,
+  keycloakLogoutUrl,
+  takeKeycloakAuthCode,
+} from '../auth/keycloak.js'
 import * as authApi from '../services/api/auth.api.js'
 import { setUnauthorizedHandler } from '../services/api/client.js'
 import { getErrorMessage } from '../utils/errorMessages.js'
@@ -7,9 +13,14 @@ import { clearToken, getToken, setToken } from '../utils/tokenStorage.js'
 export const AuthContext = createContext(null)
 
 const SESSION_EXPIRED = 'Your session has expired. Please log in again.'
+const ALLOW_LOCAL_PASSWORD_LOGIN = import.meta.env.VITE_ALLOW_LOCAL_PASSWORD_LOGIN === 'true'
 
-// status: 'checking' while a stored token is being verified, then 'authenticated' or 'anonymous'.
-// 'signedOut' is 'anonymous' after an explicit logout, so the previous page is not offered after the next login.
+function asClientError(message, status = 400) {
+  const error = new Error(message)
+  error.status = status
+  return error
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [status, setStatus] = useState(() => (getToken() ? 'checking' : 'anonymous'))
@@ -43,15 +54,13 @@ export function AuthProvider({ children }) {
           endSession(SESSION_EXPIRED)
           return
         }
-        // The token may still be valid; it is kept so the next login attempt can replace it.
         setStatus('anonymous')
         setSessionMessage(getErrorMessage(err))
       })
     return () => controller.abort()
   }, [endSession])
 
-  const login = useCallback(async (email, password) => {
-    const { user: loggedInUser, token } = await authApi.login(email, password)
+  const applySession = useCallback((loggedInUser, token) => {
     setToken(token)
     setUser(loggedInUser)
     setStatus('authenticated')
@@ -59,11 +68,57 @@ export function AuthProvider({ children }) {
     return loggedInUser
   }, [])
 
-  const logout = useCallback(() => endSession(null, 'signedOut'), [endSession])
+  const login = useCallback(
+    async (email, password) => {
+      const { user: loggedInUser, token } = await authApi.login(email, password)
+      return applySession(loggedInUser, token)
+    },
+    [applySession],
+  )
+
+  /**
+   * Starts Keycloak OIDC (PKCE redirect) or completes the callback by exchanging
+   * the authorization code on the SLAP API (no browser→Keycloak token CORS).
+   * Returns null when a browser redirect to Keycloak is in progress.
+   */
+  const loginWithKeycloak = useCallback(async () => {
+    if (!isKeycloakConfigured()) {
+      throw asClientError('Keycloak is not configured for this app')
+    }
+
+    let callback
+    try {
+      callback = takeKeycloakAuthCode()
+    } catch (err) {
+      throw asClientError(err.message || 'SELVIA sign-in failed')
+    }
+
+    if (!callback) {
+      await beginKeycloakLogin()
+      return null
+    }
+
+    const { user: loggedInUser, token } = await authApi.loginWithKeycloakCode(callback)
+    return applySession(loggedInUser, token)
+  }, [applySession])
+
+  const logout = useCallback(() => {
+    endSession(null, 'signedOut')
+    window.location.assign(keycloakLogoutUrl())
+  }, [endSession])
 
   const value = useMemo(
-    () => ({ user, status, sessionMessage, login, logout }),
-    [user, status, sessionMessage, login, logout],
+    () => ({
+      user,
+      status,
+      sessionMessage,
+      login,
+      loginWithKeycloak,
+      logout,
+      allowLocalPasswordLogin: ALLOW_LOCAL_PASSWORD_LOGIN,
+      keycloakConfigured: isKeycloakConfigured(),
+    }),
+    [user, status, sessionMessage, login, loginWithKeycloak, logout],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

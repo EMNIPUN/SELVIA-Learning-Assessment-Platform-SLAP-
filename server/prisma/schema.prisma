@@ -205,10 +205,11 @@ enum EvidenceStatus {
   @@map("evidence_status")
 }
 
-/// How an external identity was bound to a platform user. Only ADMIN_VERIFIED is supported
-/// in this foundation step; email/student-number auto-linking is intentionally absent.
+/// How an external identity was bound to a platform user.
+/// ADMIN_VERIFIED: operator-provisioned. KEYCLOAK_OIDC: first-party OIDC login on SLAP.
 enum ExternalIdentityLinkMethod {
   ADMIN_VERIFIED
+  KEYCLOAK_OIDC
 
   @@map("external_identity_link_method")
 }

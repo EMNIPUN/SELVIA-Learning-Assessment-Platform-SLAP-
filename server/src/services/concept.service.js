@@ -4,6 +4,7 @@ import { ApiError } from '../utils/ApiError.js'
 import { isForeignKeyViolation, translatePrismaError } from '../utils/prismaErrors.js'
 import { assertCourseOwner, canView, visibleChildrenFilter } from './courseAccess.service.js'
 import { assertNoDependents, deletionBlocked } from './deletionGuard.service.js'
+import { removeConceptFromGraph, syncConceptToGraph } from './graphAutoSync.service.js'
 import { getOwnedTopic, getVisibleTopic } from './topic.service.js'
 
 const NOT_FOUND = 'Concept not found'
@@ -47,7 +48,9 @@ export async function createConcept(user, topicId, input) {
   const sequenceOrder = input.sequenceOrder ?? (await conceptRepository.findMaxSequenceOrder(topicId)) + 1
 
   try {
-    return await conceptRepository.createConcept({ ...input, topicId, sequenceOrder })
+    const concept = await conceptRepository.createConcept({ ...input, topicId, sequenceOrder })
+    await syncConceptToGraph(concept)
+    return concept
   } catch (err) {
     throw translatePrismaError(err, { conflicts: CONCEPT_CONFLICTS })
   }
@@ -66,7 +69,9 @@ export async function updateConcept(user, conceptId, input) {
   await getOwnedConcept(user, conceptId)
 
   try {
-    return await conceptRepository.updateConcept(conceptId, input)
+    const concept = await conceptRepository.updateConcept(conceptId, input)
+    await syncConceptToGraph(concept)
+    return concept
   } catch (err) {
     throw translatePrismaError(err, { conflicts: CONCEPT_CONFLICTS, notFound: NOT_FOUND })
   }
@@ -84,4 +89,5 @@ export async function deleteConcept(user, conceptId) {
     }
     throw translatePrismaError(err, { notFound: NOT_FOUND })
   }
+  await removeConceptFromGraph(conceptId)
 }

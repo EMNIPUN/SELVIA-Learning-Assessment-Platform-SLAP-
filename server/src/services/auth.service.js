@@ -108,6 +108,10 @@ export async function registerUser({ email, password, firstName, lastName, role,
 }
 
 export async function loginUser({ email, password }) {
+  if (!env.allowLocalPasswordLogin) {
+    throw ApiError.serviceUnavailable('Local password login is disabled')
+  }
+
   const user = await prisma.user.findUnique({
     where: { email },
     select: { ...SAFE_USER_SELECT, passwordHash: true },

@@ -7,6 +7,7 @@ import { ApiError } from '../utils/ApiError.js'
 import { isForeignKeyViolation, translatePrismaError } from '../utils/prismaErrors.js'
 import { assertCourseOwner, canView } from './courseAccess.service.js'
 import { assertNoDependents, deletionBlocked } from './deletionGuard.service.js'
+import { removeCourseFromGraph, syncCourseToGraph } from './graphAutoSync.service.js'
 
 const NOT_FOUND = 'Course not found'
 
@@ -61,6 +62,7 @@ export async function createCourse(user, input) {
       lecturerId: lecturer.id,
       ...publishedAtChange(input.status, null),
     })
+    await syncCourseToGraph(course)
     return toCourseResponse(course)
   } catch (err) {
     throw translatePrismaError(err, { conflicts: COURSE_CONFLICTS })
@@ -94,6 +96,7 @@ export async function updateCourse(user, courseId, input) {
       ...input,
       ...publishedAtChange(input.status, course.publishedAt),
     })
+    await syncCourseToGraph(updated)
     return toCourseResponse(updated)
   } catch (err) {
     throw translatePrismaError(err, { conflicts: COURSE_CONFLICTS, notFound: NOT_FOUND })
@@ -105,7 +108,9 @@ export async function deleteCourse(user, courseId) {
   assertNoDependents('course', await dependencyRepository.countCourseDependents(courseId))
 
   try {
-    return await courseRepository.deleteCourseTree(courseId)
+    const result = await courseRepository.deleteCourseTree(courseId)
+    await removeCourseFromGraph(courseId)
+    return result
   } catch (err) {
     // A dependent record was added after the check; RESTRICT foreign keys rolled the deletion back.
     if (isForeignKeyViolation(err)) {

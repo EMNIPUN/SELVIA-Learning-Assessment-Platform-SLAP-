@@ -5,6 +5,7 @@ import { isForeignKeyViolation, translatePrismaError } from '../utils/prismaErro
 import { assertCourseOwner, canView, visibleChildrenFilter } from './courseAccess.service.js'
 import { getOwnedCourse, getVisibleCourse } from './course.service.js'
 import { assertNoDependents, deletionBlocked } from './deletionGuard.service.js'
+import { removeModuleFromGraph, syncModuleToGraph } from './graphAutoSync.service.js'
 
 const NOT_FOUND = 'Module not found'
 
@@ -44,7 +45,9 @@ export async function createModule(user, courseId, input) {
   const sequenceOrder = input.sequenceOrder ?? (await moduleRepository.findMaxSequenceOrder(courseId)) + 1
 
   try {
-    return await moduleRepository.createModule({ ...input, courseId, sequenceOrder })
+    const module = await moduleRepository.createModule({ ...input, courseId, sequenceOrder })
+    await syncModuleToGraph(module)
+    return module
   } catch (err) {
     throw translatePrismaError(err, { conflicts: MODULE_CONFLICTS })
   }
@@ -63,7 +66,9 @@ export async function updateModule(user, moduleId, input) {
   await getOwnedModule(user, moduleId)
 
   try {
-    return await moduleRepository.updateModule(moduleId, input)
+    const module = await moduleRepository.updateModule(moduleId, input)
+    await syncModuleToGraph(module)
+    return module
   } catch (err) {
     throw translatePrismaError(err, { conflicts: MODULE_CONFLICTS, notFound: NOT_FOUND })
   }
@@ -74,7 +79,9 @@ export async function deleteModule(user, moduleId) {
   assertNoDependents('module', await dependencyRepository.countModuleDependents(moduleId))
 
   try {
-    return await moduleRepository.deleteModuleTree(moduleId)
+    const result = await moduleRepository.deleteModuleTree(moduleId)
+    await removeModuleFromGraph(moduleId)
+    return result
   } catch (err) {
     if (isForeignKeyViolation(err)) {
       throw deletionBlocked('module')

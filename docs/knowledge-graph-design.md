@@ -1,7 +1,7 @@
 # SELVIA Learning Platform — Course Knowledge Graph (Neo4j)
 
-> **Status:** Explicit graph synchronization (Step 10.3). Lecturers synchronize the course hierarchy on demand
-> through the `/graph` API; nothing is synchronized automatically when PostgreSQL records change.
+> **Status:** Hierarchy create/update/delete auto-syncs to Neo4j (best-effort). Explicit `/graph` sync
+> endpoints remain for repair when Neo4j was unavailable.
 
 ## 1. Responsibilities
 
@@ -63,6 +63,11 @@ Each uniqueness constraint also provides the index `MERGE` uses to find a node b
 ## 5. Synchronization
 
 Code: `server/src/routes/v1/courseGraph.routes.js` → `controllers/courseGraph.controller.js` → `services/courseGraph.service.js` → `repositories/courseGraph.repository.js` (Cypher) and `repositories/courseHierarchy.repository.js` (PostgreSQL reads).
+
+Auto-sync after PostgreSQL hierarchy writes: `services/graphAutoSync.service.js`, called from
+`course`, `module`, `topic`, `concept`, and `lesson` services. Failures are logged and never fail the
+HTTP request. Child upserts require the parent node to already exist in Neo4j; if it is missing, the
+child sync is skipped and a warning is logged (use `sync-hierarchy` to repair).
 
 ### 5.1 API
 

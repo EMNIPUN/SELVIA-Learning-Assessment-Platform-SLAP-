@@ -19,7 +19,8 @@ import { validateParams } from '../../middleware/validate.js'
 import { conceptIdParams, courseIdParams, moduleIdParams, topicIdParams } from '../../schemas/courseStructure.schemas.js'
 import { lessonIdParams } from '../../schemas/learningContent.schemas.js'
 
-// Explicit Course Knowledge Graph synchronization (mounted at /graph). Lecturer-only; sync requires owning
+// Course Knowledge Graph sync/repair (mounted at /graph). Hierarchy writes also auto-sync best-effort
+// via graphAutoSync.service.js; these routes remain for manual repair. Lecturer-only; sync requires owning
 // the course. 404: record not in PostgreSQL; 409: parent missing from the graph; 503: Neo4j unavailable.
 const router = Router()
 router.use(authenticate, requireRole(ROLES.LECTURER))
